@@ -1,0 +1,444 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------
+// Conta e perfil
+// ------------------------------------------------------------------
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  profile        Profile?
+  subscription   Subscription?
+  waterLogs      WaterLog[]
+  fastingSessions FastingSession[]
+  mealLogs       MealLog[]
+  workoutSessions WorkoutSession[]
+  progressEntries ProgressEntry[]
+  achievements   UserAchievement[]
+  pointsLedger   PointsLedgerEntry[]
+  chatMessages   ChatMessage[]
+  shoppingItems  ShoppingListItem[]
+  dailyPlanItems DailyPlanItem[]
+  favoriteRecipes FavoriteRecipe[]
+  notificationPrefs NotificationPreference?
+}
+
+enum Goal {
+  LOSE_WEIGHT
+  MAINTAIN
+  GAIN_MUSCLE
+  HEALTHY_HABITS
+}
+
+enum ActivityLevel {
+  SEDENTARY
+  LIGHT
+  MODERATE
+  ACTIVE
+  VERY_ACTIVE
+}
+
+enum ExperienceLevel {
+  NONE
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+model Profile {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name              String
+  age               Int?
+  sex               String?
+  heightCm          Float?
+  weightKg          Float?
+  targetWeightKg    Float?
+  goal              Goal             @default(HEALTHY_HABITS)
+  activityLevel     ActivityLevel    @default(LIGHT)
+  wakeTime          String?          // "07:00"
+  sleepTime         String?          // "22:30"
+  dietaryPreferences String[]        @default([])
+  dietaryRestrictions String[]       @default([])
+  exerciseExperience ExperienceLevel @default(NONE)
+  fastingExperience  ExperienceLevel @default(NONE)
+
+  waterGoalMl       Int      @default(2000)
+  onboardingCompleted Boolean @default(false)
+  darkMode          Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model NotificationPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  waterReminders    Boolean @default(true)
+  waterStartTime    String  @default("08:00")
+  waterEndTime      String  @default("21:00")
+  waterFrequencyMin Int     @default(90)
+
+  mealReminders     Boolean @default(true)
+  exerciseReminders Boolean @default(true)
+  fastingReminders  Boolean @default(true)
+  windDownReminders Boolean @default(true)
+}
+
+// ------------------------------------------------------------------
+// Hidratação
+// ------------------------------------------------------------------
+
+model WaterLog {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountMl Int
+  loggedAt DateTime @default(now())
+
+  @@index([userId, loggedAt])
+}
+
+// ------------------------------------------------------------------
+// Jejum intermitente
+// ------------------------------------------------------------------
+
+enum FastingStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+model FastingSession {
+  id                String        @id @default(cuid())
+  userId            String
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  protocol          String        @default("16:8")
+  startedAt         DateTime      @default(now())
+  plannedDurationMin Int          @default(960)
+  pausedTotalMs     Int           @default(0)
+  lastPausedAt      DateTime?
+  endedAt           DateTime?
+  status            FastingStatus @default(ACTIVE)
+
+  @@index([userId, status])
+}
+
+// ------------------------------------------------------------------
+// Alimentação — cardápio e receitas
+// ------------------------------------------------------------------
+
+enum MealPeriod {
+  MORNING
+  AFTERNOON
+  NIGHT
+  ANY
+}
+
+enum RecipeCategory {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+  DESSERT
+  DRINK
+  TEA
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model Recipe {
+  id          String         @id @default(cuid())
+  title       String
+  category    RecipeCategory
+  period      MealPeriod     @default(ANY)
+  description String
+  imageUrl    String?
+  ingredients Json           // [{ name, quantity }]
+  steps       Json           // [string]
+  prepTimeMin Int
+  difficulty  Difficulty     @default(EASY)
+  calories    Int?
+  proteinG    Float?
+  carbsG      Float?
+  fatG        Float?
+  tags        String[]       @default([]) // rapido, economico, vegetariano, rico-em-proteina, sem-lactose, sem-gluten
+  bestTime    String?        // para chás: "manhã", "antes de dormir"...
+  cautions    String?        // avisos de segurança (chás/bebidas)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  mealLogs        MealLog[]
+  favoritedBy     FavoriteRecipe[]
+  shoppingSources ShoppingListItem[]
+}
+
+model FavoriteRecipe {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipeId String
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, recipeId])
+}
+
+model MealLog {
+  id         String     @id @default(cuid())
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipeId   String?
+  recipe     Recipe?    @relation(fields: [recipeId], references: [id])
+  customName String?
+  period     MealPeriod @default(ANY)
+  loggedAt   DateTime   @default(now())
+
+  @@index([userId, loggedAt])
+}
+
+model ShoppingListItem {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  quantity      String?
+  checked       Boolean  @default(false)
+  sourceRecipeId String?
+  sourceRecipe  Recipe?  @relation(fields: [sourceRecipeId], references: [id])
+  createdAt     DateTime @default(now())
+
+  @@index([userId, checked])
+}
+
+// ------------------------------------------------------------------
+// Movimento — exercícios
+// ------------------------------------------------------------------
+
+enum WorkoutLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum WorkoutCategory {
+  WALK
+  RUN
+  BIKE
+  HOME
+  MOBILITY
+  STRETCH
+  STRENGTH
+}
+
+model Workout {
+  id          String          @id @default(cuid())
+  title       String
+  level       WorkoutLevel
+  category    WorkoutCategory
+  durationMin Int
+  description String
+  items       Json            // [{ name, durationSec | reps, restSec, instructions }]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  sessions WorkoutSession[]
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model WorkoutSession {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutId   String
+  workout     Workout       @relation(fields: [workoutId], references: [id])
+  startedAt   DateTime      @default(now())
+  completedAt DateTime?
+  durationMin Int?
+  status      SessionStatus @default(IN_PROGRESS)
+
+  @@index([userId, status])
+}
+
+// ------------------------------------------------------------------
+// Evolução — progresso e gamificação
+// ------------------------------------------------------------------
+
+model ProgressEntry {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date     DateTime @default(now())
+  weightKg Float?
+  waistCm  Float?
+  hipCm    Float?
+  notes    String?
+
+  @@index([userId, date])
+}
+
+model Achievement {
+  id           String @id @default(cuid())
+  code         String @unique
+  title        String
+  description  String
+  icon         String
+  criteriaType String // e.g. "streak_days", "workouts_count", "water_goal_hit", "fasts_completed"
+  criteriaValue Int
+
+  unlockedBy UserAchievement[]
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+  unlockedAt    DateTime    @default(now())
+
+  @@unique([userId, achievementId])
+}
+
+model PointsLedgerEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  points    Int
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// ------------------------------------------------------------------
+// Assistente de IA
+// ------------------------------------------------------------------
+
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      ChatRole
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// Linha do tempo diária — gerada automaticamente a partir da rotina do
+// usuário (seção 14) e usada pela IA para montar/ajustar o dia.
+enum PlanItemType {
+  WATER
+  MEAL
+  EXERCISE
+  FASTING_START
+  FASTING_END
+  WIND_DOWN
+}
+
+model DailyPlanItem {
+  id       String       @id @default(cuid())
+  userId   String
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date     DateTime     @default(now())
+  time     String       // "07:30"
+  type     PlanItemType
+  title    String
+  emoji    String
+  done     Boolean      @default(false)
+
+  @@index([userId, date])
+}
+
+// ------------------------------------------------------------------
+// Assinatura / monetização
+// ------------------------------------------------------------------
+
+enum PlanTier {
+  FREE
+  PREMIUM
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  CANCELLED
+  EXPIRED
+}
+
+enum SubscriptionProvider {
+  MANUAL
+  APPLE
+  GOOGLE
+}
+
+model Subscription {
+  id               String               @id @default(cuid())
+  userId           String               @unique
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan             PlanTier             @default(FREE)
+  status           SubscriptionStatus   @default(ACTIVE)
+  provider         SubscriptionProvider @default(MANUAL)
+  trialEndsAt      DateTime?
+  currentPeriodEnd DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+}
+
+// ------------------------------------------------------------------
+// Conteúdo administrável
+// ------------------------------------------------------------------
+
+model Banner {
+  id        String   @id @default(cuid())
+  title     String
+  subtitle  String?
+  imageUrl  String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model AppNotification {
+  id        String   @id @default(cuid())
+  title     String
+  body      String
+  audience  String   @default("all") // "all" | "premium" | "free"
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+}
