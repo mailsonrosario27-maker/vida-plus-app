@@ -15,9 +15,13 @@ declare global {
   }
 }
 
+// Access token de vida curta de propósito — quem garante sessões longas é o
+// refresh token (opaco, revogável em banco; ver src/lib/tokens.ts). Se um
+// access token vazar, a janela de uso indevido é pequena e ele não pode ser
+// revogado antes de expirar sozinho.
 export function signToken(payload: AuthPayload): string {
   const secret = process.env.JWT_SECRET as string;
-  return jwt.sign(payload, secret, { expiresIn: process.env.JWT_EXPIRES_IN || '30d' } as jwt.SignOptions);
+  return jwt.sign(payload, secret, { expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || '15m' } as jwt.SignOptions);
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {

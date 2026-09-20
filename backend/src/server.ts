@@ -1,7 +1,13 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import { randomUUID } from 'node:crypto';
+import pinoHttp from 'pino-http';
+import { logger } from './lib/logger';
+import { prisma } from './lib/prisma';
 import { errorHandler } from './middleware/errorHandler';
+import { generalLimiter, aiLimiter } from './middleware/rateLimiters';
 
 import authRoutes from './routes/auth.routes';
 import profileRoutes from './routes/profile.routes';
@@ -17,12 +23,57 @@ import subscriptionRoutes from './routes/subscription.routes';
 import adminRoutes from './routes/admin.routes';
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
+app.use(helmet());
+app.use(cors());
+app.use(express.json({ limit: '1mb' }));
+
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req, res) => {
+      const existing = req.headers['x-request-id'];
+      const id = (Array.isArray(existing) ? existing[0] : existing) || randomUUID();
+      res.setHeader('x-request-id', id);
+      return id;
+    },
+    customLogLevel: (_req, res, err) => {
+      if (err || res.statusCode >= 500) return 'error';
+      if (res.statusCode >= 400) return 'warn';
+      return 'info';
+    },
+    // Não logar corpo/headers inteiros — mantém logs enxutos e sem PII/segredos
+    // além do que já é redigido em lib/logger.ts.
+    serializers: {
+      req: (req) => ({ method: req.method, url: req.url, id: req.id }),
+      res: (res) => ({ statusCode: res.statusCode }),
+    },
+  })
+);
+
+// Health checks separados: /health é o "estou de pé" simples (usado pelo
+// Render para decidir se o serviço está saudável); /health/ready checa a
+// dependência real (banco) — útil para saber se o problema é a aplicação
+// ou o Postgres antes de sair investigando o lugar errado.
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'vida-plus-backend', time: new Date().toISOString() });
 });
+
+app.get('/health/live', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+app.get('/health/ready', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', database: 'up' });
+  } catch (err) {
+    logger.error({ err }, 'Health check falhou: banco indisponível');
+    res.status(503).json({ status: 'unavailable', database: 'down' });
+  }
+});
+
+app.use('/api', generalLimiter);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
@@ -33,7 +84,7 @@ app.use('/api/meals', mealsRoutes);
 app.use('/api/workouts', workoutsRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/achievements', achievementsRoutes);
-app.use('/api/ai', aiRoutes);
+app.use('/api/ai', aiLimiter, aiRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/admin', adminRoutes);
 
@@ -45,5 +96,5 @@ app.use(errorHandler);
 
 const port = Number(process.env.PORT) || 4000;
 app.listen(port, () => {
-  console.log(`VIDA+ backend rodando em http://localhost:${port}`);
+  logger.info({ port }, 'VIDA+ backend no ar');
 });

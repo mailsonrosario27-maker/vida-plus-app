@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api, errorMessage, UNAUTHORIZED_EVENT } from './api';
+import { api, errorMessage, UNAUTHORIZED_EVENT, storeTokens, clearTokens, hasStoredSession, getStoredRefreshToken } from './api';
 import { Dashboard } from './pages/Dashboard';
 import { Users } from './pages/Users';
 import { Recipes } from './pages/Recipes';
@@ -24,7 +24,7 @@ function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
         setError('Esta conta não tem acesso ao painel administrativo.');
         return;
       }
-      localStorage.setItem('vidaplus_admin_token', res.data.token);
+      storeTokens(res.data.accessToken, res.data.refreshToken);
       onLoggedIn();
     } catch (err) {
       setError(errorMessage(err));
@@ -62,7 +62,7 @@ const NAV: { key: Page; label: string }[] = [
 ];
 
 export default function App() {
-  const [loggedIn, setLoggedIn] = useState(() => Boolean(localStorage.getItem('vidaplus_admin_token')));
+  const [loggedIn, setLoggedIn] = useState(() => hasStoredSession());
   const [page, setPage] = useState<Page>('dashboard');
 
   useEffect(() => {
@@ -99,7 +99,9 @@ export default function App() {
           className="nav-item"
           style={{ marginTop: 24, color: 'var(--danger)' }}
           onClick={() => {
-            localStorage.removeItem('vidaplus_admin_token');
+            const refreshToken = getStoredRefreshToken();
+            if (refreshToken) api.post('/auth/logout', { refreshToken }).catch(() => {});
+            clearTokens();
             setLoggedIn(false);
           }}
         >

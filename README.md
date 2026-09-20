@@ -136,10 +136,14 @@ Login com o e-mail/senha definidos em `ADMIN_EMAIL` / `ADMIN_PASSWORD` do backen
 
 ## Deploy em produção (backend no Render)
 
-O repositório já vem com `render.yaml` na raiz — um Blueprint do Render que cria o serviço
-web do backend com um clique, lendo `backend/` como raiz do projeto.
+✅ **Já no ar**: https://vida-plus-backend.onrender.com (confirmado funcionando —
+`/health`, `/api/recipes` e login retornando dados reais do banco de produção).
+Repositório: https://github.com/mailsonrosario27-maker/vida-plus-app.
 
-**Passo a passo:**
+O repositório já vem com `render.yaml` na raiz — um Blueprint do Render que cria o serviço
+web do backend com um clique, lendo `backend/` como raiz do projeto. Passo a passo abaixo
+fica registrado para o dia de recriar o serviço (ex: migrar de plano, criar um ambiente de
+staging separado):
 
 1. Crie uma conta em https://render.com (dá para entrar direto com GitHub).
 2. Suba este repositório para o GitHub (veja a seção de versionamento abaixo — precisa

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
+import { logger } from '../lib/logger';
 
 export function asyncHandler<T>(
   fn: (req: Request, res: Response, next: NextFunction) => Promise<T>
@@ -20,7 +21,17 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     if (err.code === 'P2003') return res.status(400).json({ error: 'Referência inválida.' });
     if (err.code === 'P2034') return res.status(409).json({ error: 'Conflito de concorrência, tente novamente.' });
   }
-  console.error(err);
-  const message = err instanceof Error ? err.message : 'Erro interno.';
-  res.status(500).json({ error: message });
+  const requestId = (req as Request & { id?: string }).id;
+  logger.error({ err, requestId, path: req.path, method: req.method }, 'Erro não tratado');
+
+  // Em produção, nunca devolve a mensagem crua do erro (pode vazar detalhe
+  // interno tipo string de conexão, caminho de arquivo, nome de coluna) —
+  // ela já foi para o log estruturado acima, é lá que se investiga.
+  const message =
+    process.env.NODE_ENV === 'production'
+      ? 'Erro interno. Tente novamente em instantes.'
+      : err instanceof Error
+        ? err.message
+        : 'Erro interno.';
+  res.status(500).json({ error: message, requestId });
 }

@@ -38,6 +38,37 @@ model User {
   dailyPlanItems DailyPlanItem[]
   favoriteRecipes FavoriteRecipe[]
   notificationPrefs NotificationPreference?
+  refreshTokens  RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+// Token opaco (não-JWT) para permitir revogação real: um JWT de refresh não
+// pode ser "esquecido" pelo servidor antes de expirar, um registro em banco
+// pode. Guardamos só o hash — o valor em texto puro nunca fica no banco.
+model RefreshToken {
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash           String    @unique
+  userAgent           String?
+  createdAt           DateTime  @default(now())
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  replacedByTokenHash String?
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 enum Goal {

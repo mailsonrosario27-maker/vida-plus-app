@@ -16,14 +16,22 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
-      - key: JWT_EXPIRES_IN
-        value: 30d
+      - key: ACCESS_TOKEN_EXPIRES_IN
+        value: 15m
+      - key: REFRESH_TOKEN_EXPIRES_DAYS
+        value: "30"
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: "VIDA+ <onboarding@resend.dev>"
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: ANTHROPIC_MODEL
         value: claude-sonnet-5
       - key: NODE_ENV
         value: production
+      - key: LOG_LEVEL
+        value: info
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD

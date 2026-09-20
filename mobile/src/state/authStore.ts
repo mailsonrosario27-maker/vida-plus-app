@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { api, apiErrorMessage, setUnauthorizedHandler } from '../api/client';
-import { storage } from '../utils/storage';
+import { api, apiErrorMessage, setUnauthorizedHandler, storeTokens, clearTokens, getStoredRefreshToken } from '../api/client';
 import { useNavigationStore } from './navigationStore';
 
 export interface Profile {
@@ -31,7 +30,6 @@ interface Subscription {
 
 interface AuthState {
   status: 'loading' | 'signedOut' | 'signedIn';
-  token: string | null;
   userId: string | null;
   email: string | null;
   role: 'USER' | 'ADMIN' | null;
@@ -49,7 +47,6 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   status: 'loading',
-  token: null,
   userId: null,
   email: null,
   role: null,
@@ -59,18 +56,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   clearError: () => set({ error: null }),
 
   bootstrap: async () => {
-    const token = await storage.getItem('vidaplus_token');
-    if (!token) {
+    // O access token dura só 15 min — o que determina se existe uma sessão
+    // para restaurar é o refresh token, não ele. Se /auth/me vier com o
+    // access token vencido, o interceptor em api/client.ts renova sozinho.
+    const refreshToken = await getStoredRefreshToken();
+    if (!refreshToken) {
       set({ status: 'signedOut' });
       return;
     }
-    set({ token });
     try {
       await get().refreshMe();
       set({ status: 'signedIn' });
     } catch {
-      await storage.removeItem('vidaplus_token');
-      set({ status: 'signedOut', token: null });
+      await clearTokens();
+      set({ status: 'signedOut' });
     }
   },
 
@@ -89,8 +88,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       set({ error: null });
       const { data } = await api.post('/auth/login', { email, password });
-      await storage.setItem('vidaplus_token', data.token);
-      set({ token: data.token, status: 'signedIn' });
+      await storeTokens(data.accessToken, data.refreshToken);
+      set({ status: 'signedIn' });
       await get().refreshMe();
     } catch (err) {
       set({ error: apiErrorMessage(err) });
@@ -102,8 +101,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       set({ error: null });
       const { data } = await api.post('/auth/register', { email, password, name });
-      await storage.setItem('vidaplus_token', data.token);
-      set({ token: data.token, status: 'signedIn' });
+      await storeTokens(data.accessToken, data.refreshToken);
+      set({ status: 'signedIn' });
       await get().refreshMe();
     } catch (err) {
       set({ error: apiErrorMessage(err) });
@@ -112,10 +111,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
-    await storage.removeItem('vidaplus_token');
+    const refreshToken = await getStoredRefreshToken();
+    if (refreshToken) {
+      // Revoga a sessão no servidor também — não só apaga local. Falha de
+      // rede aqui não deve impedir o logout local.
+      api.post('/auth/logout', { refreshToken }).catch(() => {});
+    }
+    await clearTokens();
     set({
       status: 'signedOut',
-      token: null,
       userId: null,
       email: null,
       role: null,

@@ -5,6 +5,7 @@
 // O assistente NUNCA deve diagnosticar, prescrever medicamentos ou substituir
 // acompanhamento profissional — isso é reforçado via system prompt e também
 // nas respostas de fallback abaixo.
+import { logger } from './logger';
 
 const SYSTEM_PROMPT = `Você é o Assistente VIDA+, parte de um aplicativo de hábitos saudáveis e emagrecimento consciente.
 
@@ -75,7 +76,7 @@ export async function getAssistantReply(ctx: ChatContext): Promise<string> {
     });
 
     if (!res.ok) {
-      console.error('Anthropic API error', res.status, await res.text());
+      logger.error({ status: res.status, body: await res.text() }, 'Anthropic API retornou erro');
       return fallbackReply(ctx.message);
     }
 
@@ -83,7 +84,7 @@ export async function getAssistantReply(ctx: ChatContext): Promise<string> {
     const text = data.content?.find((block) => block.type === 'text')?.text;
     return text?.trim() || fallbackReply(ctx.message);
   } catch (err) {
-    console.error('Falha ao chamar a IA:', err);
+    logger.error({ err }, 'Falha ao chamar a IA');
     return fallbackReply(ctx.message);
   }
 }

@@ -1,9 +1,11 @@
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { storage } from '../utils/storage';
 
 const API_PORT = 4000;
+const TOKEN_KEY = 'vidaplus_token';
+const REFRESH_TOKEN_KEY = 'vidaplus_refresh_token';
 
 // Em desenvolvimento (rodando via `expo start`, seja web, Expo Go ou dev
 // client), descobrimos o backend sozinhos a partir do host que o próprio
@@ -28,8 +30,22 @@ const apiUrl = resolveApiUrl();
 
 export const api = axios.create({ baseURL: apiUrl });
 
+export async function storeTokens(accessToken: string, refreshToken: string) {
+  await storage.setItem(TOKEN_KEY, accessToken);
+  await storage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+}
+
+export async function clearTokens() {
+  await storage.removeItem(TOKEN_KEY);
+  await storage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+export async function getStoredRefreshToken() {
+  return storage.getItem(REFRESH_TOKEN_KEY);
+}
+
 api.interceptors.request.use(async (config) => {
-  const token = await storage.getItem('vidaplus_token');
+  const token = await storage.getItem(TOKEN_KEY);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -45,10 +61,44 @@ export function setUnauthorizedHandler(handler: () => void) {
   onUnauthorized = handler;
 }
 
+// O access token dura só 15 minutos de propósito (ver backend). Em vez de
+// derrubar o usuário toda hora, tentamos renovar silenciosamente com o
+// refresh token antes de desistir. `refreshPromise` compartilhado evita que
+// várias chamadas simultâneas disparem várias renovações ao mesmo tempo —
+// como o refresh token é de uso único (rotação), a segunda chamada
+// concorrente invalidaria a primeira.
+let refreshPromise: Promise<string | null> | null = null;
+
+async function performRefresh(): Promise<string | null> {
+  const storedRefreshToken = await getStoredRefreshToken();
+  if (!storedRefreshToken) return null;
+  try {
+    const res = await axios.post(`${apiUrl}/auth/refresh`, { refreshToken: storedRefreshToken });
+    await storeTokens(res.data.accessToken, res.data.refreshToken);
+    return res.data.accessToken as string;
+  } catch {
+    return null;
+  }
+}
+
 api.interceptors.response.use(
   (res) => res,
-  (error) => {
-    if (axios.isAxiosError(error) && error.response?.status === 401) {
+  async (error) => {
+    const config = error.config as (AxiosRequestConfig & { _retried?: boolean }) | undefined;
+    const isAuthEndpoint = config?.url?.includes('/auth/refresh') || config?.url?.includes('/auth/login');
+
+    if (axios.isAxiosError(error) && error.response?.status === 401 && config && !config._retried && !isAuthEndpoint) {
+      if (!refreshPromise) {
+        refreshPromise = performRefresh().finally(() => {
+          refreshPromise = null;
+        });
+      }
+      const newAccessToken = await refreshPromise;
+      if (newAccessToken) {
+        config._retried = true;
+        config.headers = { ...config.headers, Authorization: `Bearer ${newAccessToken}` };
+        return api.request(config);
+      }
       onUnauthorized?.();
     }
     return Promise.reject(error);
