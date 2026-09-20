@@ -11,14 +11,14 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "API_URL": "https://TROQUE-PARA-URL-DE-STAGING/api"
+        "API_URL": "https://vida-plus-backend.onrender.com/api"
       },
       "android": { "buildType": "apk" }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "API_URL": "https://TROQUE-PARA-URL-DE-PRODUCAO/api"
+        "API_URL": "https://vida-plus-backend.onrender.com/api"
       }
     }
   },
