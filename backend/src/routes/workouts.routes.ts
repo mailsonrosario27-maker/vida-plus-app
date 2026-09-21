@@ -4,25 +4,28 @@ import { prisma } from '../lib/prisma';
 import { requireAuth } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { awardPoints, checkAndUnlockAchievements, POINTS } from '../lib/gamification';
+import { paginationSchema, setPaginationHeaders } from '../lib/pagination';
 
 const router = Router();
 
 const listQuerySchema = z.object({
   level: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED']).optional(),
   category: z.enum(['WALK', 'RUN', 'BIKE', 'HOME', 'MOBILITY', 'STRETCH', 'STRENGTH']).optional(),
-});
+}).merge(paginationSchema);
 
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const { level, category } = listQuerySchema.parse(req.query);
-    const workouts = await prisma.workout.findMany({
-      where: {
-        ...(level ? { level } : {}),
-        ...(category ? { category } : {}),
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const { level, category, page, limit } = listQuerySchema.parse(req.query);
+    const where = {
+      ...(level ? { level } : {}),
+      ...(category ? { category } : {}),
+    };
+    const [workouts, total] = await Promise.all([
+      prisma.workout.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
+      prisma.workout.count({ where }),
+    ]);
+    setPaginationHeaders(res, { page, limit }, total);
     res.json(workouts);
   })
 );

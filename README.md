@@ -306,9 +306,27 @@ UTC-3 — qualquer registro feito entre 21h e meia-noite (horário de Brasília)
 "amanhã" em UTC, mas os relatórios que usavam horário local ainda diziam que era "hoje" —
 ou seja, cerca de 3 das 24 horas do dia produziam essa contradição, todo santo dia, para
 qualquer usuário brasileiro. Corrigido centralizando toda a lógica de "início do dia" em
-`backend/src/lib/dateBoundaries.ts`, sempre em UTC dos dois lados. **Isso não substitui
-timezone por usuário** (segue como limitação conhecida, documentada mais acima) — só
-elimina a contradição interna que existia antes disso.
+`backend/src/lib/dateBoundaries.ts`, sempre em UTC dos dois lados. Naquele momento isso
+ainda não substituía timezone por usuário — resolvido na Fase 3, abaixo.
+
+**Fase 3 — Versionamento de API, paginação e timezone por usuário**: todas as rotas passaram
+de `/api/*` para `/api/v1/*` (mobile, admin e testes atualizados juntos) — decisão tomada
+proativamente, antes de existir qualquer app publicado dependendo do caminho antigo, pra não
+ter que quebrar clientes depois. Listagens que podiam crescer sem limite (receitas, treinos,
+usuários no admin) ganharam paginação real (`page`/`limit`, headers `X-Total-Count` etc.),
+substituindo o `take: 200` fixo que existia em `/admin/users`.
+
+O ponto principal desta fase foi resolver de vez a limitação de timezone: `Profile` ganhou
+um campo `timezone` (fuso IANA, ex. `America/Sao_Paulo`, com esse mesmo valor como default
+pra contas antigas), capturado automaticamente do dispositivo
+(`Intl.DateTimeFormat().resolvedOptions().timeZone`) ao concluir o onboarding no mobile e
+validado no backend contra a lista real de fusos IANA (`Intl.supportedValuesOf('timeZone')`).
+`backend/src/lib/dateBoundaries.ts` ganhou as variantes `*InTz` (`startOfTodayInTz`,
+`daysAgoInTz`, `dateKeyInTz` etc.), que calculam o instante UTC correspondente à meia-noite
+**no fuso do usuário**, sem depender de nenhuma lib externa (usa só `Intl` do próprio Node).
+Água, refeições, streak/conquistas, plano do dia e o resumo de progresso agora usam essas
+variantes; as funções puramente `*UTC` continuam existindo só para a métrica agregada do
+admin (usuários ativos nos últimos 30 dias), que não pertence a nenhum usuário específico.
 
 ## Checklist de revisão (pedido no briefing)
 

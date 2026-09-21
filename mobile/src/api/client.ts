@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import { storage } from '../utils/storage';
 
 const API_PORT = 4000;
+const API_BASE_PATH = '/api/v1';
 const TOKEN_KEY = 'vidaplus_token';
 const REFRESH_TOKEN_KEY = 'vidaplus_refresh_token';
 
@@ -18,12 +19,12 @@ function resolveApiUrl(): string {
   const hostUri =
     Constants.expoConfig?.hostUri || (Constants as unknown as { expoGoConfig?: { debuggerHost?: string } }).expoGoConfig?.debuggerHost;
   if (hostUri) {
-    if (Platform.OS === 'web') return `http://localhost:${API_PORT}/api`;
+    if (Platform.OS === 'web') return `http://localhost:${API_PORT}${API_BASE_PATH}`;
     const host = hostUri.split(':')[0];
-    return `http://${host}:${API_PORT}/api`;
+    return `http://${host}:${API_PORT}${API_BASE_PATH}`;
   }
   const configured = Constants.expoConfig?.extra?.apiUrl as string | undefined;
-  return configured || `http://localhost:${API_PORT}/api`;
+  return configured || `http://localhost:${API_PORT}${API_BASE_PATH}`;
 }
 
 const apiUrl = resolveApiUrl();

@@ -7,8 +7,14 @@ import { asyncHandler } from '../middleware/errorHandler';
 const router = Router();
 router.use(requireAuth);
 
+const IANA_TIMEZONES = new Set(Intl.supportedValuesOf('timeZone'));
+
 const onboardingSchema = z.object({
   name: z.string().min(1),
+  timezone: z
+    .string()
+    .refine((tz) => IANA_TIMEZONES.has(tz), { message: 'Fuso horário inválido.' })
+    .optional(),
   age: z.number().int().positive().optional(),
   sex: z.string().optional(),
   heightCm: z.number().positive().optional(),

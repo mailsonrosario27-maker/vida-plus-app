@@ -1,6 +1,6 @@
 import { prisma } from './prisma';
 import { MealPeriod } from '@prisma/client';
-import { startOfTodayUTC, endOfTodayUTC } from './dateBoundaries';
+import { startOfTodayInTz, endOfTodayInTz, DEFAULT_TIMEZONE } from './dateBoundaries';
 
 function toMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
@@ -28,6 +28,7 @@ export type PlanItem = {
 // VIDA+ já entrega o roteiro do dia e vai marcando o que foi cumprido.
 export async function getTodayPlan(userId: string): Promise<PlanItem[]> {
   const profile = await prisma.profile.findUnique({ where: { userId } });
+  const timeZone = profile?.timezone || DEFAULT_TIMEZONE;
   const wake = toMinutes(profile?.wakeTime || '07:00');
   const sleep = toMinutes(profile?.sleepTime || '22:30');
   const dayLength = ((sleep - wake + 1440) % 1440) || 900;
@@ -43,8 +44,8 @@ export async function getTodayPlan(userId: string): Promise<PlanItem[]> {
     { time: toHHMM(sleep - 60), type: 'WIND_DOWN', title: 'Preparação para dormir', emoji: '🌙' },
   ];
 
-  const startOfDay = startOfTodayUTC();
-  const endOfDay = endOfTodayUTC();
+  const startOfDay = startOfTodayInTz(timeZone);
+  const endOfDay = endOfTodayInTz(timeZone);
 
   const [waterLogs, mealLogs, workoutSessions] = await Promise.all([
     prisma.waterLog.findMany({ where: { userId, loggedAt: { gte: startOfDay, lte: endOfDay } } }),

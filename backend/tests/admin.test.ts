@@ -6,18 +6,18 @@ describe('Admin — autorização e validação', () => {
 
   it('usuário comum recebe 403 em rota admin', async () => {
     const user = await registerUser();
-    const res = await api.get('/api/admin/metrics').set('Authorization', `Bearer ${user.accessToken}`);
+    const res = await api.get('/api/v1/admin/metrics').set('Authorization', `Bearer ${user.accessToken}`);
     expect(res.status).toBe(403);
   });
 
   it('requisição sem token recebe 401, não 403 (não vaza que a rota existe)', async () => {
-    const res = await api.get('/api/admin/metrics');
+    const res = await api.get('/api/v1/admin/metrics');
     expect(res.status).toBe(401);
   });
 
   it('admin de verdade acessa métricas', async () => {
     const admin = await registerAdmin();
-    const res = await api.get('/api/admin/metrics').set('Authorization', `Bearer ${admin.accessToken}`);
+    const res = await api.get('/api/v1/admin/metrics').set('Authorization', `Bearer ${admin.accessToken}`);
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('totalUsers');
   });
@@ -25,7 +25,7 @@ describe('Admin — autorização e validação', () => {
   it('rejeita receita com lista de ingredientes vazia', async () => {
     const admin = await registerAdmin();
     const res = await api
-      .post('/api/admin/recipes')
+      .post('/api/v1/admin/recipes')
       .set('Authorization', `Bearer ${admin.accessToken}`)
       .send({
         title: 'Receita inválida',
@@ -41,7 +41,7 @@ describe('Admin — autorização e validação', () => {
   it('rejeita receita com ingrediente em branco', async () => {
     const admin = await registerAdmin();
     const res = await api
-      .post('/api/admin/recipes')
+      .post('/api/v1/admin/recipes')
       .set('Authorization', `Bearer ${admin.accessToken}`)
       .send({
         title: 'Receita inválida',
@@ -57,7 +57,7 @@ describe('Admin — autorização e validação', () => {
   it('cria e edita uma receita válida', async () => {
     const admin = await registerAdmin();
     const create = await api
-      .post('/api/admin/recipes')
+      .post('/api/v1/admin/recipes')
       .set('Authorization', `Bearer ${admin.accessToken}`)
       .send({
         title: 'Receita de teste',
@@ -70,7 +70,7 @@ describe('Admin — autorização e validação', () => {
     expect(create.status).toBe(201);
 
     const edit = await api
-      .put(`/api/admin/recipes/${create.body.id}`)
+      .put(`/api/v1/admin/recipes/${create.body.id}`)
       .set('Authorization', `Bearer ${admin.accessToken}`)
       .send({ title: 'Receita de teste (editada)' });
     expect(edit.status).toBe(200);
@@ -79,12 +79,12 @@ describe('Admin — autorização e validação', () => {
 
   it('cria banner e alterna ativo/inativo', async () => {
     const admin = await registerAdmin();
-    const create = await api.post('/api/admin/banners').set('Authorization', `Bearer ${admin.accessToken}`).send({ title: 'Banner teste' });
+    const create = await api.post('/api/v1/admin/banners').set('Authorization', `Bearer ${admin.accessToken}`).send({ title: 'Banner teste' });
     expect(create.status).toBe(201);
     expect(create.body.active).toBe(true);
 
     const toggle = await api
-      .patch(`/api/admin/banners/${create.body.id}`)
+      .patch(`/api/v1/admin/banners/${create.body.id}`)
       .set('Authorization', `Bearer ${admin.accessToken}`)
       .send({ active: false });
     expect(toggle.status).toBe(200);
@@ -94,7 +94,7 @@ describe('Admin — autorização e validação', () => {
   it('retorna 404 limpo (não 500) ao editar receita inexistente', async () => {
     const admin = await registerAdmin();
     const res = await api
-      .put('/api/admin/recipes/id-que-nao-existe')
+      .put('/api/v1/admin/recipes/id-que-nao-existe')
       .set('Authorization', `Bearer ${admin.accessToken}`)
       .send({ title: 'x' });
     expect(res.status).toBe(404);

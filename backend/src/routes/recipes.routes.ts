@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireAuth } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
+import { paginationSchema, setPaginationHeaders } from '../lib/pagination';
 
 const router = Router();
 
@@ -10,21 +11,23 @@ const listQuerySchema = z.object({
   category: z.enum(['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK', 'DESSERT', 'DRINK', 'TEA']).optional(),
   period: z.enum(['MORNING', 'AFTERNOON', 'NIGHT', 'ANY']).optional(),
   tag: z.string().optional(),
-});
+}).merge(paginationSchema);
 
 // Listagem pública (não exige login) para permitir preview antes do cadastro.
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const { category, period, tag } = listQuerySchema.parse(req.query);
-    const recipes = await prisma.recipe.findMany({
-      where: {
-        ...(category ? { category } : {}),
-        ...(period ? { period } : {}),
-        ...(tag ? { tags: { has: tag } } : {}),
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const { category, period, tag, page, limit } = listQuerySchema.parse(req.query);
+    const where = {
+      ...(category ? { category } : {}),
+      ...(period ? { period } : {}),
+      ...(tag ? { tags: { has: tag } } : {}),
+    };
+    const [recipes, total] = await Promise.all([
+      prisma.recipe.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
+      prisma.recipe.count({ where }),
+    ]);
+    setPaginationHeaders(res, { page, limit }, total);
     res.json(recipes);
   })
 );

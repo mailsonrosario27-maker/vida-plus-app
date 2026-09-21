@@ -116,6 +116,7 @@ model Profile {
   waterGoalMl       Int      @default(2000)
   onboardingCompleted Boolean @default(false)
   darkMode          Boolean  @default(false)
+  timezone          String   @default("America/Sao_Paulo") // IANA tz (ex.: "America/Sao_Paulo") — usada para calcular "hoje" (água, refeições, streak) no horário local do usuário, não em UTC.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

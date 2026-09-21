@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { requireAuth, requireAdmin } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { daysAgoUTC } from '../lib/dateBoundaries';
+import { paginationSchema, setPaginationHeaders } from '../lib/pagination';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -52,12 +53,18 @@ router.get(
 router.get(
   '/users',
   asyncHandler(async (req, res) => {
-    const users = await prisma.user.findMany({
-      where: { role: 'USER' },
-      include: { profile: true, subscription: true },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
+    const { page, limit } = paginationSchema.parse(req.query);
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where: { role: 'USER' },
+        include: { profile: true, subscription: true },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.user.count({ where: { role: 'USER' } }),
+    ]);
+    setPaginationHeaders(res, { page, limit }, total);
     res.json(
       users.map((u) => ({
         id: u.id,

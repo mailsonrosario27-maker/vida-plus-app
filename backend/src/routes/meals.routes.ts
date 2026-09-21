@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma';
 import { requireAuth } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { awardPoints, checkAndUnlockAchievements, POINTS } from '../lib/gamification';
-import { startOfTodayUTC } from '../lib/dateBoundaries';
+import { startOfTodayInTz, resolveUserTimezone } from '../lib/dateBoundaries';
 
 const router = Router();
 router.use(requireAuth);
@@ -12,8 +12,9 @@ router.use(requireAuth);
 router.get(
   '/today',
   asyncHandler(async (req, res) => {
+    const timeZone = await resolveUserTimezone(req.auth!.userId);
     const logs = await prisma.mealLog.findMany({
-      where: { userId: req.auth!.userId, loggedAt: { gte: startOfTodayUTC() } },
+      where: { userId: req.auth!.userId, loggedAt: { gte: startOfTodayInTz(timeZone) } },
       include: { recipe: true },
       orderBy: { loggedAt: 'asc' },
     });

@@ -52,7 +52,7 @@ export async function registerUser(overrides?: { email?: string; password?: stri
   const password = overrides?.password ?? 'senha123456';
   const name = overrides?.name ?? 'Usuária de Teste';
 
-  const res = await api.post('/api/auth/register').send({ email, password, name });
+  const res = await api.post('/api/v1/auth/register').send({ email, password, name });
   if (res.status !== 201) {
     throw new Error(`Falha ao registrar usuário de teste: ${res.status} ${JSON.stringify(res.body)}`);
   }
@@ -79,6 +79,6 @@ export async function registerAdmin(overrides?: { email?: string; password?: str
   const password = overrides?.password ?? 'senha123456';
   const user = await registerUser({ ...overrides, password });
   await prisma.user.update({ where: { id: user.id }, data: { role: 'ADMIN' } });
-  const res = await api.post('/api/auth/login').send({ email: user.email, password });
+  const res = await api.post('/api/v1/auth/login').send({ email: user.email, password });
   return { id: user.id, email: user.email, accessToken: res.body.accessToken, refreshToken: res.body.refreshToken };
 }

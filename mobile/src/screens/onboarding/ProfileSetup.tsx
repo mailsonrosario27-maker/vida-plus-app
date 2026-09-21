@@ -210,6 +210,7 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
     try {
       await api.post('/profile/complete-onboarding', {
         name: form.name,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         age: form.age ? Number(form.age) : undefined,
         sex: form.sex || undefined,
         heightCm: form.heightCm ? Number(form.heightCm) : undefined,

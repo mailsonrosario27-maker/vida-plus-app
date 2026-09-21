@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { currentStreak } from '../lib/gamification';
 import { getTodayPlan } from '../lib/dailyPlan';
-import { startOfTodayUTC, daysAgoUTC, dateKeyUTC } from '../lib/dateBoundaries';
+import { startOfTodayInTz, daysAgoInTz, dateKeyInTz, resolveUserTimezone, DEFAULT_TIMEZONE } from '../lib/dateBoundaries';
 
 const router = Router();
 router.use(requireAuth);
@@ -23,10 +23,11 @@ router.get(
   '/summary',
   asyncHandler(async (req, res) => {
     const userId = req.auth!.userId;
-    const startOfDay = startOfTodayUTC();
+    const profile = await prisma.profile.findUnique({ where: { userId } });
+    const timeZone = profile?.timezone || DEFAULT_TIMEZONE;
+    const startOfDay = startOfTodayInTz(timeZone);
 
-    const [profile, waterLogs, mealLogs, workoutSessions, fastingSession, points, streak] = await Promise.all([
-      prisma.profile.findUnique({ where: { userId } }),
+    const [waterLogs, mealLogs, workoutSessions, fastingSession, points, streak] = await Promise.all([
       prisma.waterLog.findMany({ where: { userId, loggedAt: { gte: startOfDay } } }),
       prisma.mealLog.count({ where: { userId, loggedAt: { gte: startOfDay } } }),
       prisma.workoutSession.aggregate({
@@ -35,7 +36,7 @@ router.get(
       }),
       prisma.fastingSession.findFirst({ where: { userId, status: { in: ['ACTIVE', 'PAUSED'] } } }),
       prisma.pointsLedgerEntry.aggregate({ where: { userId }, _sum: { points: true } }),
-      currentStreak(userId),
+      currentStreak(userId, timeZone),
     ]);
 
     const waterTotal = waterLogs.reduce((s, l) => s + l.amountMl, 0);
@@ -79,8 +80,9 @@ router.get(
   '/history',
   asyncHandler(async (req, res) => {
     const days = Number(req.query.days) || 30;
+    const timeZone = await resolveUserTimezone(req.auth!.userId);
     const entries = await prisma.progressEntry.findMany({
-      where: { userId: req.auth!.userId, date: { gte: daysAgoUTC(days) } },
+      where: { userId: req.auth!.userId, date: { gte: daysAgoInTz(days, timeZone) } },
       orderBy: { date: 'asc' },
     });
     res.json(entries);
@@ -111,7 +113,8 @@ router.get(
   asyncHandler(async (req, res) => {
     const userId = req.auth!.userId;
     const days = Number(req.query.days) || 30;
-    const since = daysAgoUTC(days);
+    const timeZone = await resolveUserTimezone(userId);
+    const since = daysAgoInTz(days, timeZone);
 
     const [waterLogs, mealLogs, workouts, fasts] = await Promise.all([
       prisma.waterLog.findMany({ where: { userId, loggedAt: { gte: since } }, select: { loggedAt: true } }),
@@ -129,7 +132,7 @@ router.get(
     const activityCount = new Map<string, number>();
     const bump = (d: Date | null) => {
       if (!d) return;
-      const key = dateKeyUTC(d);
+      const key = dateKeyInTz(d, timeZone);
       activityCount.set(key, (activityCount.get(key) || 0) + 1);
     };
     waterLogs.forEach((l) => bump(l.loggedAt));
