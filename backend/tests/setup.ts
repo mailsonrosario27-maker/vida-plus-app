@@ -10,10 +10,15 @@ beforeAll(() => {
       `NODE_ENV é "${process.env.NODE_ENV}", esperado "test". Rode os testes via "npm test" (usa .env.test) — nunca aponte a suíte para o banco de dev/produção.`
     );
   }
+  // Aceita o banco Neon dedicado a teste OU um Postgres local/efêmero (ex.:
+  // o serviço `postgres:16` da CI no GitHub Actions, isolado por definição)
+  // — qualquer outro DATABASE_URL (dev, produção) é rejeitado.
   const dbUrl = process.env.DATABASE_URL || '';
-  if (!dbUrl.includes('ep-withered-breeze')) {
+  const isDedicatedTestDb = dbUrl.includes('ep-withered-breeze');
+  const isEphemeralLocalDb = /@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl);
+  if (!isDedicatedTestDb && !isEphemeralLocalDb) {
     throw new Error(
-      'DATABASE_URL não parece ser o banco de teste dedicado (vida-plus-test). Abortando para não arriscar apagar dados de outro ambiente.'
+      'DATABASE_URL não parece ser o banco de teste dedicado (vida-plus-test) nem um Postgres local efêmero. Abortando para não arriscar apagar dados de outro ambiente.'
     );
   }
 });

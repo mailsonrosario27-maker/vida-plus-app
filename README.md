@@ -137,7 +137,7 @@ Login com o e-mail/senha definidos em `ADMIN_EMAIL` / `ADMIN_PASSWORD` do backen
 2. **Contas de desenvolvedor Apple ($99/ano) e Google Play ($25 único)** para publicar nas
    lojas, mais um **EAS Build** (`eas build`) configurado no projeto Expo.
 3. **RevenueCat (ou StoreKit/Billing direto)** para processar pagamentos reais de assinatura
-   — hoje o endpoint `/api/subscription/subscribe` ativa o Premium manualmente, sem cobrar
+   — hoje o endpoint `/api/v1/subscription/subscribe` ativa o Premium manualmente, sem cobrar
    nada; é o ponto certo para plugar o SDK.
 4. **Push notifications reais** (Expo Push / FCM / APNs) — hoje as notificações são só
    locais, agendadas no próprio dispositivo. O botão "Enviar notificação" do admin só grava
@@ -151,7 +151,7 @@ Login com o e-mail/senha definidos em `ADMIN_EMAIL` / `ADMIN_PASSWORD` do backen
 ## Deploy em produção (backend no Render)
 
 ✅ **Já no ar**: https://vida-plus-backend.onrender.com (confirmado funcionando —
-`/health`, `/api/recipes` e login retornando dados reais do banco de produção).
+`/health`, `/api/v1/recipes` e login retornando dados reais do banco de produção).
 Repositório: https://github.com/mailsonrosario27-maker/vida-plus-app.
 
 O repositório já vem com `render.yaml` na raiz — um Blueprint do Render que cria o serviço
@@ -200,11 +200,11 @@ integrações que só fazem sentido com contas de desenvolvedor pagas e testes e
 físico — por isso ficaram fora deste MVP, mas a arquitetura já foi pensada para recebê-las:
 
 - **Leitura de rótulos por câmera** (OCR de tabela nutricional): usar `expo-camera` para
-  capturar a foto e enviar para um endpoint novo `/api/ai/scan-label` que chama um modelo
+  capturar a foto e enviar para um endpoint novo `/api/v1/ai/scan-label` que chama um modelo
   com visão (Claude com input de imagem) para extrair calorias/macros e sugerir se o
   produto se encaixa nas restrições do usuário.
 - **Reconhecimento de alimentos por foto**: mesmo pipeline de câmera, outro endpoint
-  (`/api/ai/recognize-meal`) que classifica o prato e sugere um `MealLog` pré-preenchido
+  (`/api/v1/ai/recognize-meal`) que classifica o prato e sugere um `MealLog` pré-preenchido
   para o usuário confirmar — nunca registra automaticamente sem confirmação.
 - **Integração com Apple Health / Google Fit**: `react-native-health` (iOS) e
   `react-native-health-connect` (Android) para importar passos/exercícios/peso e cruzar
@@ -327,6 +327,41 @@ validado no backend contra a lista real de fusos IANA (`Intl.supportedValuesOf('
 Água, refeições, streak/conquistas, plano do dia e o resumo de progresso agora usam essas
 variantes; as funções puramente `*UTC` continuam existindo só para a métrica agregada do
 admin (usuários ativos nos últimos 30 dias), que não pertence a nenhum usuário específico.
+
+**Fase 4 — Cobrança real (Apple/Google) — 🔴 BLOQUEADO**: não implementado, e não dá pra
+simular sem virar teatro. Falta, nesta ordem:
+1. Você criar a conta Apple Developer (~US$99/ano) e a conta Google Play Console
+   (~US$25 único) — são contas pessoais/da empresa, ninguém faz isso por você.
+2. Com as contas em mãos, configurar `eas build` de verdade (hoje `mobile/eas.json` só tem
+   os profiles, sem credenciais de assinatura de app).
+3. Integrar um SDK de pagamento real (RevenueCat é o caminho mais simples pra cobrir
+   StoreKit + Google Billing com uma API só) no lugar do endpoint atual
+   `/api/v1/subscription/subscribe`, que hoje só liga o Premium manualmente sem cobrar nada.
+
+Assim que essas contas existirem, esta fase volta a ficar acionável — é só avisar.
+
+**Fase 5 — Infraestrutura (CI + Docker)**: o mega-prompt original também pedia filas com
+Redis, RBAC de 3 níveis e documentação OpenAPI completa. Avaliado e decidido **não**
+implementar isso agora — o app tem poucos usuários, nenhum job assíncrono pesado, e o
+RBAC de 2 níveis (`USER`/`ADMIN`, já implementado desde a Fase 1) cobre tudo que existe hoje;
+adicionar essa complexidade sem necessidade real vai contra o próprio pedido do briefing de
+"não criar arquitetura excessivamente complexa". Priorizados os dois itens que trazem valor
+imediato sem esse custo:
+
+- **CI no GitHub Actions** (`.github/workflows/backend-ci.yml`): a cada push/PR que toque em
+  `backend/`, roda `tsc --noEmit` e a suíte de 47 testes contra um Postgres efêmero (serviço
+  `postgres:16` da própria Action, não o Neon de teste) — pega erro de tipo ou regressão
+  antes de chegar no Render. Não precisa de nenhum secret novo no GitHub: o banco é
+  descartável e criado do zero a cada execução. Para permitir isso, `tests/setup.ts` passou
+  a aceitar tanto o Neon dedicado de teste (`ep-withered-breeze`) quanto um Postgres local
+  (`localhost`/`127.0.0.1`) — qualquer outro `DATABASE_URL` continua bloqueado.
+- **Dockerfile de produção** (`backend/Dockerfile`, multi-stage: build TypeScript → imagem
+  final só com `dist/` + deps de produção, aplica `prisma migrate deploy` antes de subir).
+  Não substitui o deploy no Render — é útil pra rodar local em condições parecidas com
+  produção, ou pra portar de hosting mais pra frente sem reescrever nada. ⚠️ Escrito seguindo
+  o padrão multi-stage recomendado pelo próprio Prisma para Debian slim, mas **não testado
+  localmente** nesta sessão (esta máquina não tem Docker instalado) — validar com
+  `docker build -t vida-plus-backend backend/` antes de confiar nele para algo sério.
 
 ## Checklist de revisão (pedido no briefing)
 
