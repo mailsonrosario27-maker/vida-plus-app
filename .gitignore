@@ -4,7 +4,9 @@ build/
 .env
 .env.local
 .env.production
+.env.test
 .env.*.local
+coverage/
 *.log
 .expo/
 .expo-shared/

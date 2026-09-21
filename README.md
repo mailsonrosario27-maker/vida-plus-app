@@ -55,6 +55,19 @@ Variáveis de ambiente (`backend/.env`, veja `.env.example`):
 - `ADMIN_EMAIL` / `ADMIN_PASSWORD` — credenciais do usuário administrador criado pelo seed.
   **Troque a senha padrão antes de expor o admin publicamente.**
 
+**Testes automatizados** (unit + integração, banco Neon dedicado só pra teste
+— nunca toca dev/produção):
+
+```bash
+npm test          # roda uma vez (usa backend/.env.test)
+npm run test:watch # modo observador, durante o desenvolvimento
+```
+
+A suíte cobre regressão de segurança (os ataques IDOR corrigidos numa revisão anterior —
+ver seção abaixo — nunca devem voltar a funcionar), o fluxo completo de autenticação
+(registro/login/refresh com rotação/logout/recuperação de senha) e as regras de
+gamificação (pontos não duplicam, conquistas não desbloqueiam duas vezes).
+
 ### 2. App mobile
 
 ```bash
@@ -65,9 +78,10 @@ npm run android    # abre no emulador/dispositivo Android via Expo Go
 npm run ios        # abre no simulador/dispositivo iOS via Expo Go (precisa de macOS)
 ```
 
-O app aponta para `http://localhost:4000/api` por padrão (`mobile/app.json` → `extra.apiUrl`).
-Para testar em um celular físico com Expo Go, troque `localhost` pelo IP da sua máquina na
-rede local.
+Em desenvolvimento (`expo start`), o app descobre o backend sozinho a partir do endereço que
+o Metro Bundler usou pra servir o app — não precisa configurar nada pra testar num celular
+físico na mesma rede Wi-Fi. Builds de produção usam a URL fixada em `mobile/eas.json`
+(`env.API_URL` de cada perfil), injetada via `mobile/app.config.js`.
 
 ### 3. Painel administrativo
 
@@ -265,6 +279,36 @@ vezes prioriza um endereço IPv6 lento, fazendo a primeira reconexão do Prisma 
 demorar. Corrigido forçando IPv4 primeiro (`dns.setDefaultResultOrder('ipv4first')`) em
 `backend/src/lib/prisma.ts` — se o backend ficar muito tempo parado, a primeira requisição
 após reiniciar pode levar alguns segundos a mais enquanto o compute "acorda".
+
+## Hardening do backend (em andamento, 2026-09-20/21)
+
+Depois do deploy em produção, iniciamos uma segunda rodada de robustecimento (auditoria +
+plano faseado, seguindo o padrão "auditar → planejar → executar em etapas testadas" pedido
+explicitamente). Fases concluídas até aqui:
+
+**Fase 1 — Segurança e confiabilidade**: refresh tokens revogáveis com rotação (access
+token caiu de 30 dias para 15 minutos), recuperação de senha real (com e-mail via Resend
+ou modo dev com fallback em log), rate limiting calibrado por endpoint (rígido em
+login/registro, generoso em refresh pra não derrubar sessões legítimas), Helmet, logs
+estruturados com request ID. Detalhes completos na seção anterior.
+
+**Fase 2 — Testes automatizados**: suíte com Vitest + Supertest (47 testes) contra um
+banco Neon **dedicado só a teste** (`vida-plus-test`, terceiro projeto separado de dev e
+produção). Cobre os testes de regressão de segurança dos ataques IDOR corrigidos
+anteriormente, o fluxo completo de autenticação, autorização admin (RBAC) e as regras de
+gamificação. Rodar com `npm test` dentro de `backend/`.
+
+Ao escrever os testes de gamificação, a suíte **encontrou um bug real de verdade** (não um
+teste mal escrito): o cálculo de streak/"hoje" misturava horário **local** do processo Node
+(`setHours`) com data em **UTC** (`toISOString().slice(0,10)`) em pontos diferentes do
+código. Num servidor rodando fora de UTC+0 — como esta máquina de desenvolvimento, em
+UTC-3 — qualquer registro feito entre 21h e meia-noite (horário de Brasília) contava para
+"amanhã" em UTC, mas os relatórios que usavam horário local ainda diziam que era "hoje" —
+ou seja, cerca de 3 das 24 horas do dia produziam essa contradição, todo santo dia, para
+qualquer usuário brasileiro. Corrigido centralizando toda a lógica de "início do dia" em
+`backend/src/lib/dateBoundaries.ts`, sempre em UTC dos dois lados. **Isso não substitui
+timezone por usuário** (segue como limitação conhecida, documentada mais acima) — só
+elimina a contradição interna que existia antes disso.
 
 ## Checklist de revisão (pedido no briefing)
 

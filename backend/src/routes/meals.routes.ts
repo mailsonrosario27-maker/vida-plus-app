@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { requireAuth } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { awardPoints, checkAndUnlockAchievements, POINTS } from '../lib/gamification';
+import { startOfTodayUTC } from '../lib/dateBoundaries';
 
 const router = Router();
 router.use(requireAuth);
@@ -11,10 +12,8 @@ router.use(requireAuth);
 router.get(
   '/today',
   asyncHandler(async (req, res) => {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
     const logs = await prisma.mealLog.findMany({
-      where: { userId: req.auth!.userId, loggedAt: { gte: startOfDay } },
+      where: { userId: req.auth!.userId, loggedAt: { gte: startOfTodayUTC() } },
       include: { recipe: true },
       orderBy: { loggedAt: 'asc' },
     });

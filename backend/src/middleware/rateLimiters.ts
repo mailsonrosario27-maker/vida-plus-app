@@ -1,5 +1,12 @@
 import rateLimit from 'express-rate-limit';
 
+// Em teste automatizado, a suíte inteira chama /register e /login dezenas
+// de vezes em segundos — isso esgotaria o limite real e quebraria testes
+// sem relação nenhuma com força bruta. A lógica do limitador em si é
+// validada isoladamente em tests/rateLimiter.unit.test.ts, com sua própria
+// instância de limite baixo — não precisa (e não deve) estar ativa aqui.
+const skipInTest = () => process.env.NODE_ENV === 'test';
+
 // Login/registro/reset de senha: alvo clássico de força bruta e enumeração
 // de e-mail. Limite rígido por IP.
 export const authLimiter = rateLimit({
@@ -7,6 +14,7 @@ export const authLimiter = rateLimit({
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTest,
   message: { error: 'Muitas tentativas. Tente novamente em alguns minutos.' },
 });
 
@@ -20,6 +28,7 @@ export const refreshLimiter = rateLimit({
   limit: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTest,
   message: { error: 'Muitas tentativas. Tente novamente em alguns minutos.' },
 });
 
@@ -30,6 +39,7 @@ export const aiLimiter = rateLimit({
   limit: 15,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTest,
   keyGenerator: (req) => req.auth?.userId || req.ip || 'unknown',
   message: { error: 'Muitas mensagens em pouco tempo. Aguarde um instante.' },
 });
@@ -42,5 +52,6 @@ export const generalLimiter = rateLimit({
   limit: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTest,
   message: { error: 'Muitas requisições. Aguarde um instante.' },
 });

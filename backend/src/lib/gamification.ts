@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { startOfTodayUTC, dateKeyUTC } from './dateBoundaries';
 
 export const POINTS = {
   WATER_LOG: 10,
@@ -16,8 +17,8 @@ export async function awardPoints(userId: string, points: number, reason: string
 // (a mais longa é de 30 dias), evita varrer o histórico completo do usuário a cada log.
 async function activeDatesSet(userId: string): Promise<Set<string>> {
   const since = new Date();
-  since.setDate(since.getDate() - 90);
-  since.setHours(0, 0, 0, 0);
+  since.setUTCDate(since.getUTCDate() - 90);
+  since.setUTCHours(0, 0, 0, 0);
 
   const [waters, meals, workouts, fasts] = await Promise.all([
     prisma.waterLog.findMany({ where: { userId, loggedAt: { gte: since } }, select: { loggedAt: true } }),
@@ -32,7 +33,7 @@ async function activeDatesSet(userId: string): Promise<Set<string>> {
     }),
   ]);
   const dates = new Set<string>();
-  const add = (d: Date | null) => d && dates.add(d.toISOString().slice(0, 10));
+  const add = (d: Date | null) => d && dates.add(dateKeyUTC(d));
   waters.forEach((w) => add(w.loggedAt));
   meals.forEach((m) => add(m.loggedAt));
   workouts.forEach((w) => add(w.completedAt));
@@ -43,11 +44,10 @@ async function activeDatesSet(userId: string): Promise<Set<string>> {
 export async function currentStreak(userId: string): Promise<number> {
   const dates = await activeDatesSet(userId);
   let streak = 0;
-  const cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
-  while (dates.has(cursor.toISOString().slice(0, 10))) {
+  const cursor = startOfTodayUTC();
+  while (dates.has(dateKeyUTC(cursor))) {
     streak += 1;
-    cursor.setDate(cursor.getDate() - 1);
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
   return streak;
 }
@@ -63,9 +63,7 @@ const ACHIEVEMENT_CHECKS: Record<string, (userId: string) => Promise<boolean>> =
   water_goal_hit: async (userId) => {
     const profile = await prisma.profile.findUnique({ where: { userId } });
     const goal = profile?.waterGoalMl || 2000;
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const logs = await prisma.waterLog.findMany({ where: { userId, loggedAt: { gte: startOfDay } } });
+    const logs = await prisma.waterLog.findMany({ where: { userId, loggedAt: { gte: startOfTodayUTC() } } });
     return logs.reduce((s, l) => s + l.amountMl, 0) >= goal;
   },
 };

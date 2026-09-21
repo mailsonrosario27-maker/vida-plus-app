@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { requireAuth } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { awardPoints, checkAndUnlockAchievements, POINTS } from '../lib/gamification';
+import { startOfTodayUTC, daysAgoUTC, dateKeyUTC } from '../lib/dateBoundaries';
 
 const router = Router();
 router.use(requireAuth);
@@ -11,11 +12,9 @@ router.use(requireAuth);
 router.get(
   '/today',
   asyncHandler(async (req, res) => {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
     const [logs, profile] = await Promise.all([
       prisma.waterLog.findMany({
-        where: { userId: req.auth!.userId, loggedAt: { gte: startOfDay } },
+        where: { userId: req.auth!.userId, loggedAt: { gte: startOfTodayUTC() } },
         orderBy: { loggedAt: 'asc' },
       }),
       prisma.profile.findUnique({ where: { userId: req.auth!.userId } }),
@@ -29,15 +28,13 @@ router.get(
   '/history',
   asyncHandler(async (req, res) => {
     const days = Number(req.query.days) || 7;
-    const since = new Date();
-    since.setDate(since.getDate() - days);
     const logs = await prisma.waterLog.findMany({
-      where: { userId: req.auth!.userId, loggedAt: { gte: since } },
+      where: { userId: req.auth!.userId, loggedAt: { gte: daysAgoUTC(days) } },
       orderBy: { loggedAt: 'asc' },
     });
     const byDay = new Map<string, number>();
     for (const log of logs) {
-      const day = log.loggedAt.toISOString().slice(0, 10);
+      const day = dateKeyUTC(log.loggedAt);
       byDay.set(day, (byDay.get(day) || 0) + log.amountMl);
     }
     res.json(Array.from(byDay.entries()).map(([date, totalMl]) => ({ date, totalMl })));

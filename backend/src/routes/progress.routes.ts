@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { currentStreak } from '../lib/gamification';
 import { getTodayPlan } from '../lib/dailyPlan';
+import { startOfTodayUTC, daysAgoUTC, dateKeyUTC } from '../lib/dateBoundaries';
 
 const router = Router();
 router.use(requireAuth);
@@ -22,8 +23,7 @@ router.get(
   '/summary',
   asyncHandler(async (req, res) => {
     const userId = req.auth!.userId;
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const startOfDay = startOfTodayUTC();
 
     const [profile, waterLogs, mealLogs, workoutSessions, fastingSession, points, streak] = await Promise.all([
       prisma.profile.findUnique({ where: { userId } }),
@@ -79,10 +79,8 @@ router.get(
   '/history',
   asyncHandler(async (req, res) => {
     const days = Number(req.query.days) || 30;
-    const since = new Date();
-    since.setDate(since.getDate() - days);
     const entries = await prisma.progressEntry.findMany({
-      where: { userId: req.auth!.userId, date: { gte: since } },
+      where: { userId: req.auth!.userId, date: { gte: daysAgoUTC(days) } },
       orderBy: { date: 'asc' },
     });
     res.json(entries);
@@ -113,9 +111,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const userId = req.auth!.userId;
     const days = Number(req.query.days) || 30;
-    const since = new Date();
-    since.setDate(since.getDate() - days);
-    since.setHours(0, 0, 0, 0);
+    const since = daysAgoUTC(days);
 
     const [waterLogs, mealLogs, workouts, fasts] = await Promise.all([
       prisma.waterLog.findMany({ where: { userId, loggedAt: { gte: since } }, select: { loggedAt: true } }),
@@ -133,7 +129,7 @@ router.get(
     const activityCount = new Map<string, number>();
     const bump = (d: Date | null) => {
       if (!d) return;
-      const key = d.toISOString().slice(0, 10);
+      const key = dateKeyUTC(d);
       activityCount.set(key, (activityCount.get(key) || 0) + 1);
     };
     waterLogs.forEach((l) => bump(l.loggedAt));

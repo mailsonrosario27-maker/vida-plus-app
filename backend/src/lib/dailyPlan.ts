@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import { MealPeriod } from '@prisma/client';
+import { startOfTodayUTC, endOfTodayUTC } from './dateBoundaries';
 
 function toMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
@@ -42,10 +43,8 @@ export async function getTodayPlan(userId: string): Promise<PlanItem[]> {
     { time: toHHMM(sleep - 60), type: 'WIND_DOWN', title: 'Preparação para dormir', emoji: '🌙' },
   ];
 
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date();
-  endOfDay.setHours(23, 59, 59, 999);
+  const startOfDay = startOfTodayUTC();
+  const endOfDay = endOfTodayUTC();
 
   const [waterLogs, mealLogs, workoutSessions] = await Promise.all([
     prisma.waterLog.findMany({ where: { userId, loggedAt: { gte: startOfDay, lte: endOfDay } } }),

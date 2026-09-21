@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireAuth, requireAdmin } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
+import { daysAgoUTC } from '../lib/dateBoundaries';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -10,8 +11,7 @@ router.use(requireAuth, requireAdmin);
 router.get(
   '/metrics',
   asyncHandler(async (_req, res) => {
-    const since30 = new Date();
-    since30.setDate(since30.getDate() - 30);
+    const since30 = daysAgoUTC(30);
 
     const [totalUsers, premiumUsers, activeUsers30d, recipesCount, workoutsCount, mostFavorited] = await Promise.all([
       prisma.user.count({ where: { role: 'USER' } }),
